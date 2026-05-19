@@ -89,8 +89,9 @@ const getWeekKey = (weekOffset = 0): string => {
 };
 
 const getTodayName = (): Day => DAYS[((new Date().getDay() + 6) % 7)];
+const getTodayKey = (): string => new Date().toISOString().split("T")[0];
 
-const getPhase = (hollowBest: number, climbCount: number): { phase: number; label: string; color: string; desc: string } => {
+const getPhase = (hollowBest: number, climbCount: number) => {
   if (hollowBest >= 45 && climbCount >= 12) return { phase: 3, label: "Month 3 — Perform", color: "#e86b3a", desc: "Return to project grades. Tension board work." };
   if (hollowBest >= 30 && climbCount >= 6) return { phase: 2, label: "Month 2 — Reintroduce Load", color: "#4a9eca", desc: "Project 1–2 grades harder. Flag moves & drop knees." };
   return { phase: 1, label: "Month 1 — Rebuild Confidence", color: "#7bc67a", desc: "Stay within ability. Quiet feet, hip position, core tension." };
@@ -118,10 +119,14 @@ export default function App() {
   const [streak, setStreak] = useState(0);
   const [todayCue] = useState(() => CLIMBING_CUES[Math.floor(Math.random() * CLIMBING_CUES.length)]);
   const [completedWeeks, setCompletedWeeks] = useState<Record<string, boolean>>({});
-  const timerRef = useRef<number | null>(null);
-  const photoRef = useRef<HTMLInputElement>(const [probioticLog, setProbioticLog] = useState<Record<string, boolean>>({});
+
+  // Habit tracker state
+  const [probioticLog, setProbioticLog] = useState<Record<string, boolean>>({});
   const [probioticStreak, setProbioticStreak] = useState(0);
-  const [porbioticLog, setProbioticLog] = useState<Record<string, boolean>>
+
+  const timerRef = useRef<number | null>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
+
   const weekKey = getWeekKey(weekOffset);
   const storageKey = `climbing-tracker-${weekKey}`;
 
@@ -141,6 +146,8 @@ export default function App() {
         setWeeklyReflection(g.weeklyReflection || null);
         setStreak(g.streak || 0);
         setCompletedWeeks(g.completedWeeks || {});
+        setProbioticLog(g.probioticLog || {});
+        setProbioticStreak(g.probioticStreak || 0);
       }
     } catch {}
   }, [weekKey]);
@@ -158,8 +165,34 @@ export default function App() {
     try { localStorage.setItem(storageKey, JSON.stringify({ completedSets: cs, kneeRatings: kr })); } catch {}
   };
 
-  const saveGlobal = (hbl: HollowEntry[], cl: ClimbEntry[], wr: WeeklyReflection | null, s: number, cw: Record<string, boolean>) => {
-    try { localStorage.setItem("climbing-tracker-global", JSON.stringify({ hollowBodyLog: hbl, climbLog: cl, weeklyReflection: wr, streak: s, completedWeeks: cw })); } catch {}
+  const saveGlobal = (
+    hbl: HollowEntry[], cl: ClimbEntry[], wr: WeeklyReflection | null,
+    s: number, cw: Record<string, boolean>,
+    pl: Record<string, boolean>, ps: number
+  ) => {
+    try {
+      localStorage.setItem("climbing-tracker-global", JSON.stringify({
+        hollowBodyLog: hbl, climbLog: cl, weeklyReflection: wr,
+        streak: s, completedWeeks: cw, probioticLog: pl, probioticStreak: ps
+      }));
+    } catch {}
+  };
+
+  const toggleProbiotic = (dateKey: string) => {
+    const updated = { ...probioticLog, [dateKey]: !probioticLog[dateKey] };
+    // Recalculate streak
+    let s = 0;
+    const today = new Date();
+    for (let i = 0; i < 365; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const key = d.toISOString().split("T")[0];
+      if (updated[key]) s++;
+      else break;
+    }
+    setProbioticLog(updated);
+    setProbioticStreak(s);
+    saveGlobal(hollowBodyLog, climbLog, weeklyReflection, streak, completedWeeks, updated, s);
   };
 
   const toggleSet = (day: string, exercise: string, setIdx: number) => {
@@ -180,7 +213,7 @@ export default function App() {
       for (let i = keys.length - 1; i >= 0; i--) { if (updatedWeeks[keys[i]]) s++; else break; }
       setCompletedWeeks(updatedWeeks);
       setStreak(s);
-      saveGlobal(hollowBodyLog, climbLog, weeklyReflection, s, updatedWeeks);
+      saveGlobal(hollowBodyLog, climbLog, weeklyReflection, s, updatedWeeks, probioticLog, probioticStreak);
     }
   };
 
@@ -204,7 +237,7 @@ export default function App() {
     const entry: HollowEntry = { date: new Date().toLocaleDateString(), seconds: timerSeconds };
     const updated = [...hollowBodyLog, entry];
     setHollowBodyLog(updated);
-    saveGlobal(updated, climbLog, weeklyReflection, streak, completedWeeks);
+    saveGlobal(updated, climbLog, weeklyReflection, streak, completedWeeks, probioticLog, probioticStreak);
     setTimerSeconds(0); setTimerDone(false);
   };
 
@@ -216,7 +249,7 @@ export default function App() {
     const entry: HollowEntry = { date: new Date().toLocaleDateString(), seconds: secs };
     const updated = [...hollowBodyLog, entry];
     setHollowBodyLog(updated);
-    saveGlobal(updated, climbLog, weeklyReflection, streak, completedWeeks);
+    saveGlobal(updated, climbLog, weeklyReflection, streak, completedWeeks, probioticLog, probioticStreak);
     setHollowBodyTime("");
   };
 
@@ -233,7 +266,7 @@ export default function App() {
     const entry: ClimbEntry = { date: new Date().toLocaleDateString(), grade: climbGrade, notes: climbNotes, photo };
     const updated = [...climbLog, entry];
     setClimbLog(updated);
-    saveGlobal(hollowBodyLog, updated, weeklyReflection, streak, completedWeeks);
+    saveGlobal(hollowBodyLog, updated, weeklyReflection, streak, completedWeeks, probioticLog, probioticStreak);
     setClimbGrade(""); setClimbNotes("");
   };
 
@@ -248,7 +281,7 @@ export default function App() {
   const saveReflection = () => {
     const wr: WeeklyReflection = { kneeFeeel: reflectionInput.kneeFeeel, energy: reflectionInput.energy, win: reflectionInput.win, date: new Date().toLocaleDateString() };
     setWeeklyReflection(wr);
-    saveGlobal(hollowBodyLog, climbLog, wr, streak, completedWeeks);
+    saveGlobal(hollowBodyLog, climbLog, wr, streak, completedWeeks, probioticLog, probioticStreak);
     setShowReflection(false);
   };
 
@@ -258,30 +291,47 @@ export default function App() {
   const phase = getPhase(bestHollow, climbLog.length);
   const weekDates = DAYS.map((_, i) => { const base = new Date(weekKey); const d = new Date(base); d.setDate(base.getDate() + i); return d.getDate(); });
   const todayName = getTodayName();
+  const todayKey = getTodayKey();
   const isClimbDay = SCHEDULE[selectedDay].type === "climb";
   const isSunday = selectedDay === "Sunday";
   const kneeRatingColor = { good: "#7bc67a", neutral: "#f0c040", bad: "#e86b3a" };
   const kneeTrend = DAYS.map(d => { const r = kneeRatings[d]; return r ? (r.rating === "good" ? 2 : r.rating === "neutral" ? 1 : 0) : null; });
 
+  // Last 28 days for probiotic grid
+  const last28Days = Array.from({ length: 28 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (27 - i));
+    return d.toISOString().split("T")[0];
+  });
+  const probioticThisWeek = DAYS.filter((_, i) => {
+    const base = new Date(weekKey);
+    const d = new Date(base);
+    d.setDate(base.getDate() + i);
+    return probioticLog[d.toISOString().split("T")[0]];
+  }).length;
+
   return (
     <div style={{ minHeight: "100vh", background: "#0a0d14", color: "#e8e4dc", fontFamily: "'Georgia', 'Times New Roman', serif", padding: "0 0 80px 0" }}>
 
+      {/* Header */}
       <div style={{ background: "linear-gradient(180deg, #141824 0%, #0a0d14 100%)", borderBottom: "1px solid #1e2535", padding: "24px 20px 16px", textAlign: "center" }}>
         <div style={{ fontSize: 11, letterSpacing: 6, color: "#7bc67a", fontFamily: "monospace", marginBottom: 6, textTransform: "uppercase" }}>Recovery Tracker</div>
         <h1 style={{ fontSize: 26, fontWeight: 400, margin: 0, color: "#e8e4dc", letterSpacing: 1 }}>Climb Strong Again</h1>
-        <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 10 }}>
-          {streak > 0 && <div style={{ background: "#e86b3a22", border: "1px solid #e86b3a44", borderRadius: 20, padding: "4px 12px", fontSize: 12, color: "#e86b3a", fontFamily: "monospace" }}>🔥 {streak} week streak</div>}
+        <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+          {streak > 0 && <div style={{ background: "#e86b3a22", border: "1px solid #e86b3a44", borderRadius: 20, padding: "4px 12px", fontSize: 12, color: "#e86b3a", fontFamily: "monospace" }}>🔥 {streak}wk streak</div>}
           <div style={{ background: `${phase.color}22`, border: `1px solid ${phase.color}44`, borderRadius: 20, padding: "4px 12px", fontSize: 12, color: phase.color, fontFamily: "monospace" }}>Phase {phase.phase}/3</div>
+          {probioticStreak > 0 && <div style={{ background: "#a8d8a822", border: "1px solid #a8d8a844", borderRadius: 20, padding: "4px 12px", fontSize: 12, color: "#a8d8a8", fontFamily: "monospace" }}>🦠 {probioticStreak}d probiotics</div>}
         </div>
         <div style={{ marginTop: 12, display: "flex", justifyContent: "center", gap: 6 }}>
-          {["week", "progress", "log"].map((tab) => (
-            <button key={tab} onClick={() => setActiveTab(tab)} style={{ background: activeTab === tab ? "#e86b3a" : "transparent", border: `1px solid ${activeTab === tab ? "#e86b3a" : "#2a3040"}`, color: activeTab === tab ? "#fff" : "#666", padding: "6px 16px", borderRadius: 20, cursor: "pointer", fontSize: 11, letterSpacing: 2, textTransform: "uppercase", fontFamily: "monospace" }}>
+          {["week", "progress", "habits", "log"].map((tab) => (
+            <button key={tab} onClick={() => setActiveTab(tab)} style={{ background: activeTab === tab ? "#e86b3a" : "transparent", border: `1px solid ${activeTab === tab ? "#e86b3a" : "#2a3040"}`, color: activeTab === tab ? "#fff" : "#666", padding: "6px 14px", borderRadius: 20, cursor: "pointer", fontSize: 11, letterSpacing: 2, textTransform: "uppercase", fontFamily: "monospace" }}>
               {tab}
             </button>
           ))}
         </div>
       </div>
 
+      {/* WEEK TAB */}
       {activeTab === "week" && (
         <div style={{ padding: "20px 16px" }}>
           {isClimbDay && (
@@ -293,6 +343,32 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {/* Probiotic quick-tap for today */}
+          <div style={{ background: "#141824", border: `1px solid ${probioticLog[todayKey] ? "#a8d8a844" : "#1e2535"}`, borderRadius: 12, padding: "12px 16px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <span style={{ fontSize: 20 }}>🦠</span>
+              <div>
+                <div style={{ fontSize: 10, letterSpacing: 3, color: "#a8d8a8", fontFamily: "monospace", marginBottom: 2 }}>DAILY PROBIOTIC</div>
+                <div style={{ fontSize: 12, color: probioticLog[todayKey] ? "#a8d8a8" : "#555" }}>
+                  {probioticLog[todayKey] ? "✓ Taken today" : "Not logged yet"}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => toggleProbiotic(todayKey)}
+              style={{
+                width: 44, height: 44, borderRadius: 10,
+                border: `2px solid ${probioticLog[todayKey] ? "#a8d8a8" : "#2a3040"}`,
+                background: probioticLog[todayKey] ? "#a8d8a822" : "transparent",
+                color: probioticLog[todayKey] ? "#a8d8a8" : "#444",
+                cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center",
+              }}
+            >
+              {probioticLog[todayKey] ? "✓" : "+"}
+            </button>
+          </div>
+
           {isSunday && (
             <button onClick={() => setShowReflection(true)} style={{ width: "100%", background: "#9b8ec411", border: "1px solid #9b8ec433", borderRadius: 12, padding: "12px 16px", marginBottom: 16, display: "flex", gap: 10, alignItems: "center", cursor: "pointer", textAlign: "left" }}>
               <span style={{ fontSize: 18 }}>📝</span>
@@ -302,27 +378,36 @@ export default function App() {
               </div>
             </button>
           )}
+
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
             <button onClick={() => setWeekOffset(w => w - 1)} style={navBtnStyle}>← Prev</button>
             <span style={{ fontSize: 12, color: "#666", letterSpacing: 2, fontFamily: "monospace" }}>{weekOffset === 0 ? "THIS WEEK" : weekOffset === -1 ? "LAST WEEK" : `WEEK ${weekOffset > 0 ? "+" : ""}${weekOffset}`}</span>
             <button onClick={() => setWeekOffset(w => w + 1)} style={navBtnStyle}>Next →</button>
           </div>
+
           <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 16 }}>
             {DAYS.map((day, i) => {
               const prog = getDayProgress(day);
               const isToday = day === todayName && weekOffset === 0;
               const isSelected = day === selectedDay;
               const kr = kneeRatings[day];
+              const base = new Date(weekKey); base.setDate(base.getDate() + i);
+              const dayDateKey = base.toISOString().split("T")[0];
+              const hadProbiotic = probioticLog[dayDateKey];
               return (
                 <button key={day} onClick={() => setSelectedDay(day)} style={{ flex: "0 0 auto", background: isSelected ? SCHEDULE[day].color : "#141824", border: `2px solid ${isSelected ? SCHEDULE[day].color : isToday ? "#ffffff33" : "#1e2535"}`, borderRadius: 12, padding: "10px 8px 8px", cursor: "pointer", textAlign: "center", minWidth: 48, transition: "all 0.2s" }}>
                   <div style={{ fontSize: 9, color: isSelected ? "#fff" : "#555", letterSpacing: 1, fontFamily: "monospace" }}>{day.slice(0, 3).toUpperCase()}</div>
                   <div style={{ fontSize: 15, color: isSelected ? "#fff" : "#bbb", margin: "3px 0 2px" }}>{weekDates[i]}</div>
-                  {kr && <div style={{ fontSize: 8, marginBottom: 2 }}>{kr.rating === "good" ? "🟢" : kr.rating === "neutral" ? "🟡" : "🔴"}</div>}
+                  <div style={{ fontSize: 8, marginBottom: 2, display: "flex", justifyContent: "center", gap: 2 }}>
+                    {kr && <span>{kr.rating === "good" ? "🟢" : kr.rating === "neutral" ? "🟡" : "🔴"}</span>}
+                    {hadProbiotic && <span>🦠</span>}
+                  </div>
                   {prog.done > 0 && <div style={{ width: "100%", height: 3, background: "#0a0d14", borderRadius: 2, overflow: "hidden" }}><div style={{ width: `${prog.pct}%`, height: "100%", background: isSelected ? "#fff" : SCHEDULE[day].color, transition: "width 0.4s" }} /></div>}
                 </button>
               );
             })}
           </div>
+
           <div style={{ background: "#141824", borderRadius: 16, border: `1px solid ${dayInfo.color}33`, overflow: "hidden", marginBottom: 16 }}>
             <div style={{ background: `linear-gradient(90deg, ${dayInfo.color}18, transparent)`, padding: "14px 18px", borderBottom: `1px solid ${dayInfo.color}22`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
@@ -352,6 +437,7 @@ export default function App() {
               ))}
             </div>
           </div>
+
           <div style={cardStyle}>
             <div style={{ fontSize: 10, letterSpacing: 3, color: "#4a9eca", fontFamily: "monospace", marginBottom: 10 }}>KNEE CHECK-IN</div>
             {kneeRatings[selectedDay] && (
@@ -375,6 +461,92 @@ export default function App() {
         </div>
       )}
 
+      {/* HABITS TAB */}
+      {activeTab === "habits" && (
+        <div style={{ padding: "20px 16px" }}>
+          <div style={cardStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 10, letterSpacing: 3, color: "#a8d8a8", fontFamily: "monospace", marginBottom: 4 }}>🦠 DAILY PROBIOTIC</div>
+                <div style={{ fontSize: 13, color: "#666" }}>Tap the day to mark as taken</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 28, fontWeight: "bold", color: "#a8d8a8", fontFamily: "monospace" }}>{probioticStreak}</div>
+                <div style={{ fontSize: 10, color: "#444", fontFamily: "monospace" }}>DAY STREAK</div>
+              </div>
+            </div>
+
+            {/* This week quick view */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 10, color: "#555", fontFamily: "monospace", marginBottom: 8 }}>THIS WEEK — {probioticThisWeek}/7</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {DAYS.map((day, i) => {
+                  const base = new Date(weekKey); base.setDate(base.getDate() + i);
+                  const dk = base.toISOString().split("T")[0];
+                  const taken = probioticLog[dk];
+                  const isToday = dk === todayKey;
+                  return (
+                    <button key={day} onClick={() => toggleProbiotic(dk)} style={{ flex: 1, padding: "8px 4px", borderRadius: 8, cursor: "pointer", textAlign: "center", background: taken ? "#a8d8a822" : "#0a0d14", border: `1px solid ${taken ? "#a8d8a8" : isToday ? "#ffffff22" : "#1e2535"}`, transition: "all 0.15s" }}>
+                      <div style={{ fontSize: 9, color: taken ? "#a8d8a8" : "#444", fontFamily: "monospace", marginBottom: 4 }}>{day.slice(0, 3).toUpperCase()}</div>
+                      <div style={{ fontSize: 16 }}>{taken ? "✓" : "·"}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 28-day grid */}
+            <div>
+              <div style={{ fontSize: 10, color: "#555", fontFamily: "monospace", marginBottom: 8 }}>LAST 28 DAYS</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+                {last28Days.map((dk) => {
+                  const taken = probioticLog[dk];
+                  const isToday = dk === todayKey;
+                  const d = new Date(dk);
+                  return (
+                    <button key={dk} onClick={() => toggleProbiotic(dk)} title={dk} style={{ aspectRatio: "1", borderRadius: 6, cursor: "pointer", background: taken ? "#a8d8a8" : "#141824", border: `1px solid ${isToday ? "#ffffff33" : taken ? "#a8d8a8" : "#1e2535"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: taken ? "#0a0d14" : "#333", fontFamily: "monospace", transition: "all 0.15s" }}>
+                      {d.getDate()}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
+                <div style={{ width: 12, height: 12, borderRadius: 3, background: "#a8d8a8" }} />
+                <span style={{ fontSize: 11, color: "#555" }}>Taken</span>
+                <div style={{ width: 12, height: 12, borderRadius: 3, background: "#141824", border: "1px solid #1e2535", marginLeft: 8 }} />
+                <span style={{ fontSize: 11, color: "#555" }}>Missed</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div style={cardStyle}>
+            <div style={{ fontSize: 10, letterSpacing: 3, color: "#a8d8a8", fontFamily: "monospace", marginBottom: 16 }}>PROBIOTIC STATS</div>
+            <div style={{ display: "flex", gap: 12 }}>
+              <div style={{ flex: 1, textAlign: "center", padding: "14px 8px", background: "#0a0d14", borderRadius: 10, border: "1px solid #1e2535" }}>
+                <div style={{ fontSize: 26, color: "#a8d8a8", fontFamily: "monospace" }}>{probioticStreak}</div>
+                <div style={{ fontSize: 10, color: "#555", fontFamily: "monospace", marginTop: 4 }}>CURRENT STREAK</div>
+              </div>
+              <div style={{ flex: 1, textAlign: "center", padding: "14px 8px", background: "#0a0d14", borderRadius: 10, border: "1px solid #1e2535" }}>
+                <div style={{ fontSize: 26, color: "#a8d8a8", fontFamily: "monospace" }}>{probioticThisWeek}</div>
+                <div style={{ fontSize: 10, color: "#555", fontFamily: "monospace", marginTop: 4 }}>THIS WEEK</div>
+              </div>
+              <div style={{ flex: 1, textAlign: "center", padding: "14px 8px", background: "#0a0d14", borderRadius: 10, border: "1px solid #1e2535" }}>
+                <div style={{ fontSize: 26, color: "#a8d8a8", fontFamily: "monospace" }}>{last28Days.filter(dk => probioticLog[dk]).length}</div>
+                <div style={{ fontSize: 10, color: "#555", fontFamily: "monospace", marginTop: 4 }}>LAST 28 DAYS</div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ ...cardStyle, background: "#a8d8a811", border: "1px solid #a8d8a822" }}>
+            <div style={{ fontSize: 12, color: "#7bc67a", lineHeight: 1.7 }}>
+              💡 <span style={{ color: "#e8e4dc" }}>Pro tip:</span> Take probiotics at the same time each day for best absorption — morning with breakfast or 30 min before a meal works well. Consistency matters more than timing.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PROGRESS TAB */}
       {activeTab === "progress" && (
         <div style={{ padding: "20px 16px" }}>
           <div style={cardStyle}>
@@ -488,6 +660,7 @@ export default function App() {
         </div>
       )}
 
+      {/* LOG TAB */}
       {activeTab === "log" && (
         <div style={{ padding: "20px 16px" }}>
           {weeklyReflection && (
@@ -520,6 +693,7 @@ export default function App() {
               <div style={{ marginBottom: 8 }}>🥩 <span style={{ color: "#e8e4dc" }}>Protein:</span> 0.7–1g per lb of bodyweight</div>
               <div style={{ marginBottom: 8 }}>😴 <span style={{ color: "#e8e4dc" }}>Sleep:</span> 8 hrs — tissue remodeling active 18–24 months post-surgery</div>
               <div style={{ marginBottom: 8 }}>💊 <span style={{ color: "#e8e4dc" }}>Collagen:</span> 10–15g + Vitamin C, 30–60 min before training</div>
+              <div style={{ marginBottom: 8 }}>🦠 <span style={{ color: "#e8e4dc" }}>Probiotics:</span> Daily, same time each day for best results</div>
               <div>🦵 <span style={{ color: "#e8e4dc" }}>Knee check:</span> Minor achiness OK. Swelling = back off.</div>
             </div>
           </div>
@@ -534,6 +708,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Reflection Modal */}
       {showReflection && (
         <div style={{ position: "fixed", inset: 0, background: "#0a0d14ee", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 100 }}>
           <div style={{ background: "#141824", borderRadius: 16, border: "1px solid #9b8ec433", padding: 24, width: "100%", maxWidth: 400 }}>
