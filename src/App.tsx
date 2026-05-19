@@ -119,8 +119,9 @@ export default function App() {
   const [todayCue] = useState(() => CLIMBING_CUES[Math.floor(Math.random() * CLIMBING_CUES.length)]);
   const [completedWeeks, setCompletedWeeks] = useState<Record<string, boolean>>({});
   const timerRef = useRef<number | null>(null);
-  const photoRef = useRef<HTMLInputElement>(null);
-
+  const photoRef = useRef<HTMLInputElement>(const [probioticLog, setProbioticLog] = useState<Record<string, boolean>>({});
+  const [probioticStreak, setProbioticStreak] = useState(0);
+  const [porbioticLog, setProbioticLog] = useState<Record<string, boolean>>
   const weekKey = getWeekKey(weekOffset);
   const storageKey = `climbing-tracker-${weekKey}`;
 
